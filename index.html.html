@@ -833,10 +833,10 @@ const C = {
 };
 
 function loadConfig() {
-  C.ant = localStorage.getItem('u3_ant') || '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';
-  C.oai = localStorage.getItem('u3_oai') || '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';
-  C.sbu = localStorage.getItem('u3_sbu') || 'https://xqzjwzjfvaaozegqvdtt.supabase.co';
-  C.sbk = localStorage.getItem('u3_sbk') || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inhxemp3empmdmFhb3plZ3F2ZHR0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzIzNzk3NjEsImV4cCI6MjA4Nzk1NTc2MX0.BZKFYhuDnZzFVl7TrYta6y0DVA2U22kTsMp5t1IFmzA';
+  C.ant = localStorage.getItem('u3_ant') || '';
+  C.oai = localStorage.getItem('u3_oai') || '';
+  C.sbu = localStorage.getItem('u3_sbu') || '';
+  C.sbk = localStorage.getItem('u3_sbk') || '';
   ['ant','oai','sbu','sbk'].forEach(k => { const el = document.getElementById(`cfg-${k}`); if(el) el.value = C[k]; });
 }
 
@@ -1080,26 +1080,49 @@ function filterSt(s) {
 async function toggleMic(t) {
   if (isRec && recTarget === t) { stopRec(); return; }
   if (isRec) stopRec();
-  startRec(t);
+  await startRec(t);
 }
 
 async function startRec(t) {
+  const lbl = document.getElementById('mic-lbl-' + t);
+  const btn = document.getElementById('mic-' + t);
+  const ring = document.getElementById('mic-ring-' + t);
+
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    if (lbl) lbl.textContent = '❌ Micro non supporté';
+    alert('Navigateur non supporté. Utilisez Chrome ou Safari récent.');
+    return;
+  }
+
   try {
-    const stream = await navigator.mediaDevices.getUserMedia({audio:true});
-    mediaRec = new MediaRecorder(stream);
+    if (lbl) lbl.textContent = "Demande accès micro...";
+    const stream = await navigator.mediaDevices.getUserMedia({audio: true});
+
+    const types = ['audio/webm;codecs=opus','audio/webm','audio/ogg','audio/mp4',''];
+    const mimeType = types.find(t => t === '' || MediaRecorder.isTypeSupported(t));
+    mediaRec = mimeType ? new MediaRecorder(stream, {mimeType}) : new MediaRecorder(stream);
+
     audioChunks = [];
     recTarget = t;
     isRec = true;
-    const btn = document.getElementById(`mic-${t}`);
-    const ring = document.getElementById(`mic-ring-${t}`);
-    const lbl = document.getElementById(`mic-lbl-${t}`);
+
     if (btn) { btn.classList.add('recording'); btn.textContent = '⏹️'; }
     if (ring) ring.classList.add('recording');
     if (lbl) lbl.textContent = 'En cours... (appuyer pour arrêter)';
-    mediaRec.ondataavailable = e => audioChunks.push(e.data);
+
+    mediaRec.ondataavailable = e => { if (e.data.size > 0) audioChunks.push(e.data); };
     mediaRec.onstop = () => processRec(t, stream);
-    mediaRec.start();
-  } catch(e) { alert('Micro inaccessible : ' + e.message); }
+    mediaRec.start(100);
+  } catch(e) {
+    if (lbl) lbl.textContent = '❌ ' + e.message;
+    if (e.name === 'NotAllowedError') {
+      alert('Permission micro refusée. Autorisez le micro dans les réglages de votre navigateur puis rechargez la page.');
+    } else if (e.name === 'NotFoundError') {
+      alert('Aucun micro détecté.');
+    } else {
+      alert('Erreur micro : ' + e.message);
+    }
+  }
 }
 
 function stopRec() {
