@@ -1210,12 +1210,22 @@ async function generateObs(texte) {
   try {
     const raw = await callClaude(`Observation dictée:\n${texte}`, SYS_MOT, 4000);
     let parsed;
-    try { parsed = JSON.parse(raw.replace(/```json|```/g,'')); }
-    catch(e) { parsed = {mot_medical:raw,tags:[],pathologies:[]}; }
+    try {
+      const clean = raw.replace(/```json|```/g,'').trim();
+      parsed = JSON.parse(clean);
+    } catch(e) {
+      // Si pas JSON valide, utiliser le texte brut comme mot_medical
+      parsed = {mot_medical: raw, tags:[], pathologies:[]};
+    }
+
+    // S'assurer que mot_medical est bien une string avec vrais sauts de ligne
+    if (parsed.mot_medical) {
+      parsed.mot_medical = parsed.mot_medical.replace(/\\n/g, '\n');
+    }
 
     // Save
     const obsData = {
-      motif: parsed.pathologies?.[0] || 'Observation',
+      motif: parsed.pathologies?.[0] || texte.split(' ').slice(0,4).join(' ') || 'Observation',
       statut:'en_cours',
       mot_medical:parsed.mot_medical,
       texte_brut:texte,
