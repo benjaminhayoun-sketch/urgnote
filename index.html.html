@@ -207,6 +207,7 @@ select option{background:var(--bg3);}
   content:'';position:absolute;inset:-6px;border-radius:50%;
   border:1.5px solid var(--border2);
   transition:all 0.3s;
+  pointer-events:none;
 }
 .mic-ring.recording::before{
   border-color:var(--red);
@@ -1077,52 +1078,45 @@ function filterSt(s) {
 // ════════════════════════════════════════
 // MIC
 // ════════════════════════════════════════
-async function toggleMic(t) {
+function toggleMic(t) {
   if (isRec && recTarget === t) { stopRec(); return; }
   if (isRec) stopRec();
-  await startRec(t);
+  startRec(t);
 }
 
-async function startRec(t) {
+function startRec(t) {
   const lbl = document.getElementById('mic-lbl-' + t);
   const btn = document.getElementById('mic-' + t);
   const ring = document.getElementById('mic-ring-' + t);
 
-  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-    if (lbl) lbl.textContent = '❌ Micro non supporté';
-    alert('Navigateur non supporté. Utilisez Chrome ou Safari récent.');
-    return;
-  }
+  navigator.mediaDevices.getUserMedia({audio: true})
+    .then(function(stream) {
+      var options = {};
+      if (MediaRecorder.isTypeSupported('audio/webm')) {
+        options = {mimeType: 'audio/webm'};
+      } else if (MediaRecorder.isTypeSupported('audio/mp4')) {
+        options = {mimeType: 'audio/mp4'};
+      }
 
-  try {
-    if (lbl) lbl.textContent = "Demande accès micro...";
-    const stream = await navigator.mediaDevices.getUserMedia({audio: true});
+      mediaRec = new MediaRecorder(stream, options);
+      audioChunks = [];
+      recTarget = t;
+      isRec = true;
 
-    const types = ['audio/webm;codecs=opus','audio/webm','audio/ogg','audio/mp4',''];
-    const mimeType = types.find(t => t === '' || MediaRecorder.isTypeSupported(t));
-    mediaRec = mimeType ? new MediaRecorder(stream, {mimeType}) : new MediaRecorder(stream);
+      if (btn) { btn.classList.add('recording'); btn.textContent = '⏹️'; }
+      if (ring) ring.classList.add('recording');
+      if (lbl) lbl.textContent = 'En cours... (appuyer pour arrêter)';
 
-    audioChunks = [];
-    recTarget = t;
-    isRec = true;
-
-    if (btn) { btn.classList.add('recording'); btn.textContent = '⏹️'; }
-    if (ring) ring.classList.add('recording');
-    if (lbl) lbl.textContent = 'En cours... (appuyer pour arrêter)';
-
-    mediaRec.ondataavailable = e => { if (e.data.size > 0) audioChunks.push(e.data); };
-    mediaRec.onstop = () => processRec(t, stream);
-    mediaRec.start(100);
-  } catch(e) {
-    if (lbl) lbl.textContent = '❌ ' + e.message;
-    if (e.name === 'NotAllowedError') {
-      alert('Permission micro refusée. Autorisez le micro dans les réglages de votre navigateur puis rechargez la page.');
-    } else if (e.name === 'NotFoundError') {
-      alert('Aucun micro détecté.');
-    } else {
-      alert('Erreur micro : ' + e.message);
-    }
-  }
+      mediaRec.ondataavailable = function(e) {
+        if (e.data && e.data.size > 0) audioChunks.push(e.data);
+      };
+      mediaRec.onstop = function() { processRec(t, stream); };
+      mediaRec.start();
+    })
+    .catch(function(e) {
+      if (lbl) lbl.textContent = '❌ ' + e.message;
+      alert('Erreur micro : ' + e.name + ' — ' + e.message);
+    });
 }
 
 function stopRec() {
